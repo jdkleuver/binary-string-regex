@@ -1,16 +1,21 @@
 module BinaryRegex (regexDivisibleBy) where
 import Data.List
+import Data.Bits
 import qualified Data.Map as M
-import qualified Data.Bits as B
 
 type State = Int
+-- This type definition allows a different starting and accepting state, although all the functions
+-- assume that 0 will be both the initial state and the only accepting state
+-- There is no "alphabet" of accepted Chars, any string with an unexpected Char is rejected 
 type GNFA = ([State], M.Map (State, State) [Char], State, [State])
 
+-- A singleton doesn't need parentheses to group it, wrap anything more than one character in parens
 wrap :: [Char] -> [Char]
 wrap [] = []
 wrap (x:[]) = [x]
 wrap xs = '(':xs++")"
 
+-- Remove a state from the GNFA, create new transitions where necessary
 removeState :: State -> GNFA -> GNFA
 removeState s (states, transitions, i, fs) = (delete s states, allNewTransitions, i, fs)
   where
@@ -38,16 +43,18 @@ gnfaToRegex g = case M.lookup (0,0) transitions of
   Just x -> x
   where (_, transitions, _, _) = removeAllStates g
 
+-- This will return a complete DFA, but instead of a delta function it has a list of state transitions
+-- Each state transition is a regular expression.
 createGNFA :: Int -> GNFA
 createGNFA n = (reverse states, M.fromList $ zip (zip (concat (transpose $ take 2 $ repeat states)) (concat $ take 2 $ repeat states)) (concat $ repeat ["0", "1"]), 0, [0]) 
     where states = [0..((fromIntegral n)-1)]
 
-isPower2 :: (B.Bits i, Integral i) => i -> Bool
-isPower2 n = n B..&. (n-1) == 0
+isPower2 :: (Bits i, Integral i) => i -> Bool
+isPower2 n = n .&. (n-1) == 0
 
+-- For powers of two we can skip the DFA and just directly construct the regex
 regexDivisibleBy :: Int -> [Char]
-regexDivisibleBy 1 = "^[01]+$"
 regexDivisibleBy n
-    | isPower2 n = "^(0|([01]*" ++ (take (round $ logBase 2 (fromIntegral n)) $ repeat '0') ++ "))+$"
+    | isPower2 n = "^(0|([01]+" ++ (take (round $ logBase 2 (fromIntegral n)) $ repeat '0') ++ "))+$"
     | otherwise = '^':'(':(gnfaToRegex $ createGNFA n)++")+$"
 
